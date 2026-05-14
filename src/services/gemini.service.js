@@ -140,9 +140,10 @@ User's Current Skills:
 ${userSkillNames.join(', ')}
 
 Task:
-1. List ALL required technical skills for a ${jobRoleName} role (10-15 skills)
+1. List ALL required technical skills for a modern ${jobRoleName} role 
 2. Identify which user skills match the required skills (case-insensitive)
 3. Identify which required skills are missing
+4. Prioritize industry-relevant technologies and modern development practices.
 
 Return ONLY a JSON object in this exact format:
 {

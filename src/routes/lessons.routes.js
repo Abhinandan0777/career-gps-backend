@@ -1,5 +1,6 @@
 import express from 'express';
 import { authenticateJWT, authorize, requireApprovedCreator } from '../middleware/auth.middleware.js';
+import { aiOperationRateLimiter } from '../middleware/rateLimit.middleware.js';
 import {
   createLesson,
   getLessonById,
@@ -60,10 +61,10 @@ router.post('/:id/complete', authenticateJWT, completeLessonHandler);
 
 /**
  * @route   POST /api/lessons/analyze-transcript-demo
- * @desc    Analyze transcript without lesson context (demo/testing)
+ * @desc    Analyze transcript without lesson context (demo/testing) - AI operation
  * @access  Authenticated
  */
-router.post('/analyze-transcript-demo', authenticateJWT, analyzeTranscriptDemo);
+router.post('/analyze-transcript-demo', authenticateJWT, aiOperationRateLimiter, analyzeTranscriptDemo);
 
 /**
  * @route   GET /api/lessons/:lessonId/transcript
@@ -87,10 +88,10 @@ router.post('/:lessonId/transcript', authenticateJWT, authorize('creator', 'admi
 
 /**
  * @route   POST /api/lessons/:lessonId/transcript/fetch-youtube
- * @desc    Fetch transcript from YouTube video
+ * @desc    Fetch transcript from YouTube video - AI operation
  * @access  Creator (APPROVED course owner), Admin
  */
-router.post('/:lessonId/transcript/fetch-youtube', authenticateJWT, authorize('creator', 'admin'), requireApprovedCreator, fetchYouTubeTranscript);
+router.post('/:lessonId/transcript/fetch-youtube', authenticateJWT, authorize('creator', 'admin'), requireApprovedCreator, aiOperationRateLimiter, fetchYouTubeTranscript);
 
 /**
  * @route   DELETE /api/lessons/:lessonId/transcript
@@ -101,9 +102,9 @@ router.delete('/:lessonId/transcript', authenticateJWT, authorize('creator', 'ad
 
 /**
  * @route   POST /api/lessons/:lessonId/analyze-transcript
- * @desc    Analyze lesson transcript and generate structured learning materials
+ * @desc    Analyze lesson transcript and generate structured learning materials - AI operation
  * @access  Authenticated (enrolled learners or course creator)
  */
-router.post('/:lessonId/analyze-transcript', authenticateJWT, analyzeTranscript);
+router.post('/:lessonId/analyze-transcript', authenticateJWT, aiOperationRateLimiter, analyzeTranscript);
 
 export default router;

@@ -1,6 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 import { authenticateJWT } from '../middleware/auth.middleware.js';
+import { aiOperationRateLimiter } from '../middleware/rateLimit.middleware.js';
 import { 
   createOrUpdateProfile, 
   uploadResume,
@@ -46,13 +47,13 @@ router.get('/job-roles', authenticateJWT, getJobRoles);
 // POST /api/career/profile - Create or update user profile with skills
 router.post('/profile', authenticateJWT, createOrUpdateProfile);
 
-// POST /api/career/resume/upload - Upload and parse resume to extract skills
-router.post('/resume/upload', authenticateJWT, upload.single('resume'), uploadResume);
+// POST /api/career/resume/upload - Upload and parse resume to extract skills (AI operation)
+router.post('/resume/upload', authenticateJWT, aiOperationRateLimiter, upload.single('resume'), uploadResume);
 
-// POST /api/career/analyze - Analyze skill gap against target job role
-router.post('/analyze', authenticateJWT, analyzeSkillGapController);
+// POST /api/career/analyze - Analyze skill gap against target job role (AI operation)
+router.post('/analyze', authenticateJWT, aiOperationRateLimiter, analyzeSkillGapController);
 
-// POST /api/career/roadmap - Generate learning roadmap for target job role
-router.post('/roadmap', authenticateJWT, generateRoadmapController);
+// POST /api/career/roadmap - Generate learning roadmap for target job role (AI operation)
+router.post('/roadmap', authenticateJWT, aiOperationRateLimiter, generateRoadmapController);
 
 export default router;

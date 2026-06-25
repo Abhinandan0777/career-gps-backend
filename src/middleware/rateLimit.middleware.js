@@ -1,12 +1,12 @@
 import rateLimit from 'express-rate-limit';
 
 /**
- * Rate limiter for authenticated users
- * 60 requests per minute (or more in development)
+ * Rate limiter for authenticated users - General API requests
+ * More generous limits for normal operations
  */
 export const authenticatedRateLimiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 60000, // 1 minute
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1000, // 1000 requests per window in dev
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 200, // 200 requests per minute
   message: {
     error: 'Too many requests',
     message: 'Rate limit exceeded. Please try again later.',
@@ -26,20 +26,19 @@ export const authenticatedRateLimiter = rateLimit({
       retryAfter: 60
     });
   },
-  // Skip rate limiting for certain conditions if needed
+  // Skip rate limiting only in test environment
   skip: (req) => {
-    // Skip rate limiting in test and development environment
-    return process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development';
+    return process.env.NODE_ENV === 'test';
   }
 });
 
 /**
- * Rate limiter for unauthenticated users
- * 10 requests per minute (or more in development)
+ * Rate limiter for unauthenticated users - More restrictive
+ * Protects public endpoints from abuse
  */
 export const unauthenticatedRateLimiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 60000, // 1 minute
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS_UNAUTH) || 1000, // 1000 requests per window in dev
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS_UNAUTH) || 30, // 30 requests per minute
   message: {
     error: 'Too many requests',
     message: 'Rate limit exceeded. Please try again later.',
@@ -58,8 +57,69 @@ export const unauthenticatedRateLimiter = rateLimit({
     });
   },
   skip: (req) => {
-    // Skip rate limiting in test and development environment
-    return process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development';
+    return process.env.NODE_ENV === 'test';
+  }
+});
+
+/**
+ * Rate limiter for AI operations (resume parsing, skill gap, roadmap, transcript analysis)
+ * Very generous limits because these operations:
+ * - Take 5-120 seconds to complete
+ * - Are expensive API calls
+ * - Users don't repeatedly trigger them
+ */
+export const aiOperationRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // 20 AI operations per 15 minutes (more than enough)
+  message: {
+    error: 'AI operation rate limit exceeded',
+    message: 'You have made too many AI requests. Please wait 15 minutes before trying again.',
+    retryAfter: 900 // 15 minutes in seconds
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    return req.user?.userId || req.ip;
+  },
+  handler: (req, res) => {
+    res.status(429).set('Retry-After', '900').json({
+      error: 'AI operation rate limit exceeded',
+      message: 'You have made too many AI requests. Please wait 15 minutes before trying again.',
+      retryAfter: 900
+    });
+  },
+  skip: (req) => {
+    // Don't skip in production - AI calls are expensive!
+    return process.env.NODE_ENV === 'test';
+  }
+});
+
+/**
+ * Rate limiter for authentication endpoints (login, register)
+ * Protects against brute force attacks
+ */
+export const authRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 attempts per 15 minutes
+  message: {
+    error: 'Too many authentication attempts',
+    message: 'Too many login/register attempts. Please try again in 15 minutes.',
+    retryAfter: 900
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    return req.body?.email || req.ip; // Track by email or IP
+  },
+  handler: (req, res) => {
+    res.status(429).set('Retry-After', '900').json({
+      error: 'Too many authentication attempts',
+      message: 'Too many login/register attempts. Please try again in 15 minutes.',
+      retryAfter: 900
+    });
+  },
+  skip: (req) => {
+    return process.env.NODE_ENV === 'test';
   }
 });
 

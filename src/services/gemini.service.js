@@ -134,30 +134,89 @@ export async function analyzeSkillGapWithGemini(userSkills, jobRoleName) {
     return '';
   }).filter(name => name.length > 0);
 
-  const prompt = `You are a career advisor AI. Analyze the skill gap for a ${jobRoleName} position.
+  const prompt = `You are an expert career advisor and technical recruiter with deep knowledge of current industry hiring standards and job market demands.
 
-User's Current Skills:
+CONTEXT:
+A student wants to become a ${jobRoleName} and needs to know exactly what skills they must learn to be job-ready.
+
+USER'S CURRENT SKILLS:
 ${userSkillNames.join(', ')}
 
-Task:
-1. List ALL required technical skills for a modern ${jobRoleName} role 
-2. Identify which user skills match the required skills (case-insensitive)
-3. Identify which required skills are missing
-4. Prioritize industry-relevant technologies and modern development practices.
+YOUR TASK:
+Provide a realistic, actionable skill gap analysis based on REAL job market requirements for ${jobRoleName} roles in 2024-2025.
 
-Return ONLY a JSON object in this exact format:
+ANALYSIS REQUIREMENTS:
+
+1. REQUIRED SKILLS - List 12-18 skills that are ACTUALLY required by companies hiring ${jobRoleName}s:
+   - CORE ESSENTIALS (60%): Absolute must-haves that 90%+ of job postings require
+   - IMPORTANT ADDITIONS (30%): Skills that significantly increase job prospects
+   - NICE-TO-HAVE (10%): Advanced skills for senior positions or specialization
+   
+2. PRIORITIZATION CRITERIA:
+   - What do real companies ask for in job descriptions?
+   - What skills are tested in technical interviews?
+   - What technologies are currently trending in the industry?
+   - What fundamentals are absolutely non-negotiable?
+
+3. CATEGORIZE REQUIRED SKILLS BY:
+   - Programming Languages (essential ones for this role)
+   - Frameworks/Libraries (most commonly used)
+   - Tools & Technologies (git, docker, testing, etc.)
+   - Databases (SQL and/or NoSQL based on role)
+   - Soft Skills (collaboration, problem-solving, etc.)
+   - Best Practices (design patterns, clean code, etc.)
+
+4. SKILL MATCHING:
+   - Match user skills case-insensitively
+   - Recognize skill variations (e.g., "JS" = "JavaScript", "React.js" = "React")
+   - Only mark as matched if user ACTUALLY has the skill
+
+5. MISSING SKILLS:
+   - Clearly identify what's missing
+   - Prioritize them by importance (critical vs nice-to-have)
+
+IMPORTANT NOTES:
+- Be REALISTIC about current market demands, not theoretical ideals
+- Focus on EMPLOYABILITY - what will actually get someone hired?
+- Don't list obscure or outdated technologies
+- Consider entry-level expectations vs senior-level expectations
+- Base this on ACTUAL job postings and hiring manager feedback
+
+Return ONLY a valid JSON object in this exact format:
 {
-  "requiredSkills": ["skill1", "skill2", ...],
-  "matchedSkills": ["skill1", ...],
-  "missingSkills": ["skill2", ...]
+  "requiredSkills": [
+    "skill1",
+    "skill2",
+    ...
+  ],
+  "matchedSkills": [
+    "skill1",
+    ...
+  ],
+  "missingSkills": [
+    "skill2",
+    ...
+  ],
+  "criticalMissing": [
+    "skill that is absolutely essential",
+    ...
+  ],
+  "recommendations": [
+    "Specific advice item 1",
+    "Specific advice item 2",
+    "Specific advice item 3"
+  ]
 }
 
-Rules:
-- Include programming languages, frameworks, tools, databases, methodologies
-- Be comprehensive - include both fundamental and advanced skills
-- Match skills case-insensitively (e.g., "javascript" matches "JavaScript")
-- Only include skills in matchedSkills if user actually has them
-- missingSkills = requiredSkills - matchedSkills
+RULES:
+- requiredSkills: 12-18 skills total (focused on what matters)
+- matchedSkills: Skills user already has from requiredSkills list
+- missingSkills: requiredSkills - matchedSkills
+- criticalMissing: Top 3-5 most important missing skills (subset of missingSkills)
+- recommendations: 3-5 specific, actionable pieces of advice for learning path
+- Use case-insensitive matching
+- Be employer-focused: what do companies actually hire for?
+- Prioritize quality over quantity
 
 JSON object:`;
 
@@ -214,6 +273,8 @@ JSON object:`;
       requiredSkills: analysis.requiredSkills,
       matchedSkills: analysis.matchedSkills,
       missingSkills: analysis.missingSkills,
+      criticalMissing: analysis.criticalMissing || analysis.missingSkills.slice(0, 5), // Fallback to first 5 missing
+      recommendations: analysis.recommendations || [],
       readinessPercentage,
       totalSkills: totalRequired,
       matchedCount: matched

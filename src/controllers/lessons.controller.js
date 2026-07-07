@@ -1,5 +1,6 @@
 import pool from '../config/database.js';
 import { analyzeTranscriptWithAI } from '../services/gemini.service.js';
+import { uploadVideo, deleteVideo } from '../config/supabase.js';
 
 /**
  * Create a new lesson
@@ -9,9 +10,14 @@ import { analyzeTranscriptWithAI } from '../services/gemini.service.js';
  */
 export async function createLesson(req, res) {
   try {
-    const { courseId, title, content, videoUrl, order, durationMinutes } = req.body;
+    const { courseId, title, content, videoUrl } = req.body;
+    const videoFile = req.file; // Uploaded file from multer
     const userId = req.user.userId;
     const userRole = req.user.role;
+
+    // Parse numeric fields (FormData sends everything as strings)
+    const order = req.body.order ? parseInt(req.body.order, 10) : undefined;
+    const durationMinutes = req.body.durationMinutes ? parseInt(req.body.durationMinutes, 10) : undefined;
 
     // Validate required fields
     if (!courseId) {
@@ -39,7 +45,7 @@ export async function createLesson(req, res) {
       });
     }
 
-    if (order === undefined || order === null) {
+    if (order === undefined || order === null || isNaN(order)) {
       return res.status(400).json({
         error: 'Validation error',
         message: 'Order is required',
@@ -57,7 +63,7 @@ export async function createLesson(req, res) {
     }
 
     // Validate duration if provided
-    if (durationMinutes !== undefined && (!Number.isInteger(durationMinutes) || durationMinutes < 0)) {
+    if (durationMinutes !== undefined && (isNaN(durationMinutes) || !Number.isInteger(durationMinutes) || durationMinutes < 0)) {
       return res.status(400).json({
         error: 'Validation error',
         message: 'Duration must be a positive integer',
@@ -104,12 +110,34 @@ export async function createLesson(req, res) {
       RETURNING id, course_id, title, content, video_url, "order", duration_minutes, created_at, updated_at
     `;
 
+    // Handle video upload
+    let finalVideoUrl = videoUrl || null;
+
+    if (videoFile) {
+      try {
+        console.log('[Video Upload] Uploading video:', videoFile.originalname);
+        console.log('[Video Upload] Size:', (videoFile.size / (1024 * 1024)).toFixed(2), 'MB');
+        finalVideoUrl = await uploadVideo(
+          videoFile.buffer,
+          videoFile.originalname,
+          videoFile.mimetype
+        );
+        console.log('[Video Upload] Video uploaded successfully:', finalVideoUrl);
+      } catch (uploadError) {
+        console.error('[Video Upload] Upload error:', uploadError);
+        return res.status(500).json({
+          error: 'Upload failed',
+          message: 'Failed to upload video file'
+        });
+      }
+    }
+
     try {
       const insertResult = await pool.query(insertLessonQuery, [
         courseId,
         title,
         content || null,
-        videoUrl || null,
+        finalVideoUrl, // Use uploaded video URL or provided URL
         order,
         durationMinutes || null
       ]);
@@ -227,9 +255,14 @@ export async function getLessonById(req, res) {
 export async function updateLesson(req, res) {
   try {
     const { id } = req.params;
-    const { title, content, videoUrl, order, durationMinutes } = req.body;
+    const { title, content, videoUrl } = req.body;
+    const videoFile = req.file; // Uploaded file from multer
     const userId = req.user.userId;
     const userRole = req.user.role;
+
+    // Parse numeric fields (FormData sends everything as strings)
+    const order = req.body.order !== undefined ? parseInt(req.body.order, 10) : undefined;
+    const durationMinutes = req.body.durationMinutes !== undefined ? parseInt(req.body.durationMinutes, 10) : undefined;
 
     // Get existing lesson and course
     const existingLessonQuery = `
@@ -278,7 +311,7 @@ export async function updateLesson(req, res) {
     }
 
     // Validate order if provided
-    if (order !== undefined && (!Number.isInteger(order) || order < 1)) {
+    if (order !== undefined && (isNaN(order) || !Number.isInteger(order) || order < 1)) {
       return res.status(400).json({
         error: 'Validation error',
         message: 'Order must be a positive integer',
@@ -287,7 +320,7 @@ export async function updateLesson(req, res) {
     }
 
     // Validate duration if provided
-    if (durationMinutes !== undefined && (!Number.isInteger(durationMinutes) || durationMinutes < 0)) {
+    if (durationMinutes !== undefined && (isNaN(durationMinutes) || !Number.isInteger(durationMinutes) || durationMinutes < 0)) {
       return res.status(400).json({
         error: 'Validation error',
         message: 'Duration must be a positive integer',
@@ -335,6 +368,45 @@ export async function updateLesson(req, res) {
         error: 'Validation error',
         message: 'No fields to update'
       });
+    }
+
+    // Handle video upload and deletion
+    let finalVideoUrl = videoUrl;
+
+    if (videoFile) {
+      // Delete old video if it was uploaded to Supabase
+      const oldVideoQuery = 'SELECT video_url FROM lessons WHERE id = $1';
+      const oldVideoResult = await pool.query(oldVideoQuery, [id]);
+      
+      if (oldVideoResult.rows[0]?.video_url?.includes('supabase.co/storage')) {
+        console.log('[Video Update] Deleting old video:', oldVideoResult.rows[0].video_url);
+        await deleteVideo(oldVideoResult.rows[0].video_url);
+      }
+
+      // Upload new video
+      try {
+        console.log('[Video Upload] Uploading new video:', videoFile.originalname);
+        console.log('[Video Upload] Size:', (videoFile.size / (1024 * 1024)).toFixed(2), 'MB');
+        finalVideoUrl = await uploadVideo(
+          videoFile.buffer,
+          videoFile.originalname,
+          videoFile.mimetype
+        );
+        console.log('[Video Upload] Video uploaded successfully:', finalVideoUrl);
+      } catch (uploadError) {
+        console.error('[Video Upload] Upload error:', uploadError);
+        return res.status(500).json({
+          error: 'Upload failed',
+          message: 'Failed to upload video file'
+        });
+      }
+    }
+
+    // If finalVideoUrl is set (from upload or from request body), add to updates
+    if (finalVideoUrl !== undefined && !updates.find(u => u.includes('video_url'))) {
+      updates.push(`video_url = $${paramIndex}`);
+      params.push(finalVideoUrl);
+      paramIndex++;
     }
 
     // Update lesson
@@ -430,6 +502,15 @@ export async function deleteLesson(req, res) {
         error: 'Forbidden',
         message: 'You do not have permission to delete this lesson'
       });
+    }
+
+    // Get lesson video URL for cleanup
+    const videoQuery = 'SELECT video_url FROM lessons WHERE id = $1';
+    const videoResult = await pool.query(videoQuery, [id]);
+    
+    if (videoResult.rows[0]?.video_url?.includes('supabase.co/storage')) {
+      console.log('[Video Delete] Cleaning up uploaded video:', videoResult.rows[0].video_url);
+      await deleteVideo(videoResult.rows[0].video_url);
     }
 
     // Delete lesson (cascade will handle related records)

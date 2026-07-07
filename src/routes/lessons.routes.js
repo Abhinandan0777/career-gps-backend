@@ -1,4 +1,5 @@
 import express from 'express';
+import multer from 'multer';
 import { authenticateJWT, authorize, requireApprovedCreator } from '../middleware/auth.middleware.js';
 import { aiOperationRateLimiter } from '../middleware/rateLimit.middleware.js';
 import {
@@ -17,12 +18,34 @@ import {
 
 const router = express.Router();
 
+// Configure multer for video upload (memory storage)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 500 * 1024 * 1024 // 500MB max file size
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      'video/mp4',
+      'video/webm',
+      'video/ogg',
+      'video/quicktime' // .mov files
+    ];
+    
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only MP4, WebM, OGG, and MOV video files are allowed.'));
+    }
+  }
+});
+
 /**
  * @route   POST /api/lessons
- * @desc    Create a new lesson
+ * @desc    Create a new lesson (with optional video upload)
  * @access  Creator (APPROVED), Admin
  */
-router.post('/', authenticateJWT, authorize('creator', 'admin'), requireApprovedCreator, createLesson);
+router.post('/', authenticateJWT, authorize('creator', 'admin'), requireApprovedCreator, upload.single('video'), createLesson);
 
 /**
  * @route   GET /api/lessons/:id
@@ -40,10 +63,10 @@ router.get('/:id', (req, res, next) => {
 
 /**
  * @route   PUT /api/lessons/:id
- * @desc    Update lesson
+ * @desc    Update lesson (with optional video upload)
  * @access  Creator (APPROVED course owner), Admin
  */
-router.put('/:id', authenticateJWT, authorize('creator', 'admin'), requireApprovedCreator, updateLesson);
+router.put('/:id', authenticateJWT, authorize('creator', 'admin'), requireApprovedCreator, upload.single('video'), updateLesson);
 
 /**
  * @route   DELETE /api/lessons/:id
